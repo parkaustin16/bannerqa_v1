@@ -75,12 +75,25 @@ if uploaded_file:
     zones = {}
     with st.sidebar.expander("✏️ Edit Zones", expanded=True):
         for zone_name, params in st.session_state["zones"].items():
+            # Use .get() so it won't crash if keys are missing
             st.markdown(f"**{zone_name}**")
             col1, col2 = st.columns(2)
-            x = col1.number_input(f"{zone_name} X", 0.0, 1.0, params["x"], 0.0001, format="%.4f", key=f"{zone_name}_x")
-            y = col2.number_input(f"{zone_name} Y", 0.0, 1.0, params["y"], 0.0001, format="%.4f", key=f"{zone_name}_y")
-            w = col1.number_input(f"{zone_name} Width", 0.0, 1.0, params["w"], 0.0001, format="%.4f", key=f"{zone_name}_w")
-            h = col2.number_input(f"{zone_name} Height", 0.0, 1.0, params["h"], 0.0001, format="%.4f", key=f"{zone_name}_h")
+            x = col1.number_input(
+                f"{zone_name} X", 0.0, 1.0, float(params.get("x", 0.0)),
+                0.0001, format="%.4f", key=f"{zone_name}_x"
+            )
+            y = col2.number_input(
+                f"{zone_name} Y", 0.0, 1.0, float(params.get("y", 0.0)),
+                0.0001, format="%.4f", key=f"{zone_name}_y"
+            )
+            w = col1.number_input(
+                f"{zone_name} Width", 0.0, 1.0, float(params.get("w", 0.1)),
+                0.0001, format="%.4f", key=f"{zone_name}_w"
+            )
+            h = col2.number_input(
+                f"{zone_name} Height", 0.0, 1.0, float(params.get("h", 0.1)),
+                0.0001, format="%.4f", key=f"{zone_name}_h"
+            )
             zones[zone_name] = {"x": x, "y": y, "w": w, "h": h}
 
         # Update session state with latest edits
