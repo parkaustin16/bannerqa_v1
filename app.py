@@ -134,7 +134,23 @@ if uploaded_file:
     penalties = []
     score = 100
     used_zones = {z: False for z in abs_zones}
-
+    st.sidebar.markdown("## Ignore Text Rules")
+    ignore_terms_input = st.sidebar.text_area(
+        "Enter words/phrases to ignore (comma separated):",
+        value="",
+        help="Example: OLED, Trademark, Draft"
+    )
+    # Process input into a clean list
+    ignore_terms = [term.strip().lower() for term in ignore_terms_input.split(",") if term.strip()]
+    # Draw and check unused zones
+    for zone_name, used in used_zones.items():
+        zx, zy, zw, zh = abs_zones[zone_name]
+        draw.rectangle([zx, zy, zx + zw, zy + zh], outline="green", width=3)
+        if not used:
+            st.write(f"No text found in {zone_name}")
+    if ignore_terms:
+        st.info(f"🔎 Ignoring text matches for: {', '.join(ignore_terms)}")
+    score = max(score, 0)
     for (bbox, text, prob) in results:
         detected_text = text.lower().strip()
 
@@ -169,23 +185,7 @@ if uploaded_file:
             score -= 20
 
 
-    st.sidebar.markdown("## Ignore Text Rules")
-    ignore_terms_input = st.sidebar.text_area(
-        "Enter words/phrases to ignore (comma separated):",
-        value="",
-        help="Example: OLED, Trademark, Draft"
-    )
-    # Process input into a clean list
-    ignore_terms = [term.strip().lower() for term in ignore_terms_input.split(",") if term.strip()]
-    # Draw and check unused zones
-    for zone_name, used in used_zones.items():
-        zx, zy, zw, zh = abs_zones[zone_name]
-        draw.rectangle([zx, zy, zx + zw, zy + zh], outline="green", width=3)
-        if not used:
-            st.write(f"No text found in {zone_name}")
-    if ignore_terms:
-        st.info(f"🔎 Ignoring text matches for: {', '.join(ignore_terms)}")
-    score = max(score, 0)
+
 
     st.image(img, caption=f"QA Result – Score: {score}", use_container_width=True)
 
