@@ -136,34 +136,38 @@ if uploaded_file:
     used_zones = {z: False for z in abs_zones}
 
     for (bbox, text, prob) in results:
+        detected_text = text.lower().strip()
+
+        # --- Check if ignored ---
+        if any(term in detected_text for term in ignore_terms):
+            # Draw bounding box in bright blue to mark as ignored
+            xs = [int(p[0]) for p in bbox]
+            ys = [int(p[1]) for p in bbox]
+            tx, ty, tw, th = min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys)
+
+            draw.rectangle([tx, ty, tx + tw, ty + th], outline="blue", width=3)
+            continue  # Skip penalties & zone checks
+
+        # --- Otherwise process normally ---
         xs = [int(p[0]) for p in bbox]
         ys = [int(p[1]) for p in bbox]
         tx, ty, tw, th = min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys)
+
+        # Draw normal detected text in red
         draw.rectangle([tx, ty, tx + tw, ty + th], outline="red", width=2)
 
+        # Zone validation (same as before)
         inside_any = False
-        for zone_name, (zx, zy, zw, zh) in abs_zones.items():
-            if box_overlap((tx, ty, tw, th), (zx, zy, zw, zh), threshold=overlap_threshold):
+        for zone_name, (zx, zy, zw, zh) in zones.items():
+            if zx <= tx and ty >= zy and (tx + tw) <= (zx + zw) and (ty + th) <= (zy + zh):
                 inside_any = True
                 used_zones[zone_name] = True
                 break
+
         if not inside_any:
             penalties.append(("Text outside allowed zones", 20))
             score -= 20
-    for (bbox, text, prob) in results:
-        detected_text = text.lower().strip()
 
-        # Skip if matches ignore list
-        if any(term in detected_text for term in ignore_terms):
-            continue
-
-            # Otherwise run your zone-check logic...
-        xs = [int(p[0]) for p in bbox]
-        ys = [int(p[1]) for p in bbox]
-        tx, ty, tw, th = min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys)
-
-        draw.rectangle([tx, ty, tx + tw, ty + th], outline="red", width=2)
-        # ... zone checking, infractions, penalties etc.
 
     st.sidebar.markdown("## Ignore Text Rules")
     ignore_terms_input = st.sidebar.text_area(
@@ -171,7 +175,6 @@ if uploaded_file:
         value="",
         help="Example: OLED, Trademark, Draft"
     )
-
     # Process input into a clean list
     ignore_terms = [term.strip().lower() for term in ignore_terms_input.split(",") if term.strip()]
     # Draw and check unused zones
@@ -179,8 +182,9 @@ if uploaded_file:
         zx, zy, zw, zh = abs_zones[zone_name]
         draw.rectangle([zx, zy, zx + zw, zy + zh], outline="green", width=3)
         if not used:
-            st.write((f"No text found in {zone_name}"))
-
+            st.write(f"No text found in {zone_name}")
+    if ignore_terms:
+        st.info(f"🔎 Ignoring text matches for: {', '.join(ignore_terms)}")
     score = max(score, 0)
 
     st.image(img, caption=f"QA Result – Score: {score}", use_container_width=True)
