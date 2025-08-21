@@ -145,17 +145,20 @@ with st.sidebar.expander("🛑 Ignore Settings", expanded=False):
     if "ignore_input" not in st.session_state:
         st.session_state["ignore_input"] = ""
 
+
     ignore_input = st.text_area(
         "Enter words/phrases to ignore (comma separated):",
-        value=st.session_state["ignore_input"],
-        key="ignore_input_widget"
+        value="",
+        key="ignore_input"
     )
 
-    if st.button("Apply Ignore Terms"):
-        new_terms = [t.strip().lower() for t in ignore_input.split(",") if t.strip()]
-        st.session_state["persistent_ignore_terms"].extend(new_terms)
-        st.session_state["persistent_ignore_terms"] = sorted(set(st.session_state["persistent_ignore_terms"]))
-        save_ignore_terms(st.session_state["persistent_ignore_terms"])
+    if st.button("Apply Ignore Texts"):
+        if ignore_input.strip():
+            new_items = [i.strip() for i in ignore_input.split(",") if i.strip()]
+            st.session_state.ignore_list.extend(new_items)
+            st.session_state.ignore_list = list(set(st.session_state.ignore_list))  # dedupe
+            st.session_state.ignore_input = ""  # ✅ safe way to clear
+            st.rerun()
         # safely clear input
         st.session_state.update({
             "ignore_input": "",
