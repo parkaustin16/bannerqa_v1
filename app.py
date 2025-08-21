@@ -181,6 +181,27 @@ with st.sidebar.expander("🛑 Ignore Settings", expanded=False):
             st.rerun()
     from PIL import Image
 
+    if uploaded_image is not None:
+        # Convert uploaded image to PIL
+        if isinstance(uploaded_image, np.ndarray):
+            pil_bg = Image.fromarray(uploaded_image)
+        else:
+            pil_bg = uploaded_image
+
+        canvas_result = st_canvas(
+            fill_color="rgba(0, 0, 255, 0.3)",  # semi-transparent blue
+            stroke_width=2,
+            stroke_color="blue",
+            background_image=pil_bg,  # ✅ safe now
+            update_streamlit=True,
+            height=pil_bg.height,
+            width=pil_bg.width,
+            drawing_mode="rect",
+            key="ignore_canvas",
+        )
+    else:
+        canvas_result = None
+
     # Convert uploaded image to PIL before passing to st_canvas
     if isinstance(uploaded_file, np.ndarray):
         pil_bg = Image.fromarray(uploaded_file)
