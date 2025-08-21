@@ -1,76 +1,124 @@
 import streamlit as st
+from PIL import Image, ImageDraw
 import easyocr
+import numpy as np
 import json
 import os
-import cv2
-import numpy as np
-from PIL import Image
 
-# ===================== Persistent Storage =====================
-SETTINGS_FILE = "zones.json"
-IGNORE_TERMS_FILE = "ignore_terms.json"
+st.set_page_config(page_title="Banner QA – Text Zone Validation", layout="wide")
 
-def load_settings():
-    if os.path.exists(SETTINGS_FILE):
-        with open(SETTINGS_FILE, "r") as f:
+st.title("Banner QA – Text Zone Validation")
+
+# --- File uploader ---
+uploaded_file = st.file_uploader("Upload a banner", type=["png", "jpg", "jpeg"])
+
+# --- OCR Reader (cache to avoid reloading) ---
+@st.cache_resource
+def load_reader():
+    return easyocr.Reader(["en"])
+reader = load_reader()
+
+# --- Overlap helper function ---
+def box_overlap(b1, b2, threshold=0.3):
+    x1, y1, w1, h1 = b1
+    x2, y2, w2, h2 = b2
+    ix1 = max(x1, x2)
+    iy1 = max(y1, y2)
+    ix2 = min(x1 + w1, x2 + w2)
+    iy2 = min(y1 + h1, y2 + h2)
+    if ix2 <= ix1 or iy2 <= iy1:
+        return False
+    inter_area = (ix2 - ix1) * (iy2 - iy1)
+    ocr_area = w1 * h1
+    return inter_area / ocr_area >= threshold
+
+# --- Config Files ---
+CONFIG_FILE = "zone_presets.json"
+IGNORE_FILE = "ignore_terms.json"
+
+def save_presets(zones):
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(zones, f, indent=4)
+
+def load_presets():
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, "r") as f:
             return json.load(f)
     return {}
 
-def save_settings(settings):
-    with open(SETTINGS_FILE, "w") as f:
-        json.dump(settings, f, indent=4)
+def save_ignore_terms(terms):
+    with open(IGNORE_FILE, "w") as f:
+        json.dump(terms, f, indent=4)
 
 def load_ignore_terms():
-    if os.path.exists(IGNORE_TERMS_FILE):
-        with open(IGNORE_TERMS_FILE, "r") as f:
+    if os.path.exists(IGNORE_FILE):
+        with open(IGNORE_FILE, "r") as f:
             return json.load(f)
     return []
 
-def save_ignore_terms(terms):
-    with open(IGNORE_TERMS_FILE, "w") as f:
-        json.dump(terms, f, indent=4)
+# --- Default zones (normalized 0–1) ---
+default_zone_defs = {
+    "Eyebrow Copy": (0.125, 0.1042, 0.3047, 0.021),
+    "Headline Copy": (0.125, 0.1458, 0.3047, 0.1458),
+    "Body Copy": (0.125, 0.3027, 0.3047, 0.05),
+}
 
-# ===================== OCR =====================
-reader = easyocr.Reader(['en'], gpu=False)
+# If preset exists, load and use as defaults
+loaded_presets = load_presets()
+if loaded_presets:
+    default_zone_defs = loaded_presets
 
-# ===================== Sidebar =====================
-st.sidebar.title("⚙️ Settings")
+st.sidebar.title("⚙️ Zone Settings")
 
-# Zones config
-with st.sidebar.expander("📐 Zone Settings", expanded=False):
-    if "zones" not in st.session_state:
-        st.session_state["zones"] = load_settings()
+# --- Overlap Threshold Control ---
+with st.sidebar.expander("🔎 Detection Settings", expanded=False):
+    overlap_threshold = st.slider(
+        "Minimum overlap (%) for text to count as inside a zone",
+        min_value=0.0, max_value=1.0, value=0.8, step=0.01, format="%.2f"
+    )
 
-    for zone_name in ["Eyebrow Copy", "Headline Copy", "Body Copy"]:
-        if zone_name not in st.session_state["zones"]:
-            st.session_state["zones"][zone_name] = {"x": 0.1, "y": 0.1, "w": 0.3, "h": 0.1}
-
-        st.markdown(f"**{zone_name}**")
+# --- Zone Inputs ---
+zones = {}
+with st.sidebar.expander("📐 Define Text Zones", expanded=False):
+    for zone_name, defaults in default_zone_defs.items():
+        dx, dy, dw, dh = defaults
+        st.markdown(f"**{zone_name}** (normalized 0–1 for width & height)")
         col1, col2 = st.columns(2)
-        x = col1.number_input(f"{zone_name} X", 0.0, 1.0, st.session_state["zones"][zone_name]["x"], 0.0001, format="%.4f", key=f"{zone_name}_x")
-        y = col2.number_input(f"{zone_name} Y", 0.0, 1.0, st.session_state["zones"][zone_name]["y"], 0.0001, format="%.4f", key=f"{zone_name}_y")
-        w = col1.number_input(f"{zone_name} W", 0.0, 1.0, st.session_state["zones"][zone_name]["w"], 0.0001, format="%.4f", key=f"{zone_name}_w")
-        h = col2.number_input(f"{zone_name} H", 0.0, 1.0, st.session_state["zones"][zone_name]["h"], 0.0001, format="%.4f", key=f"{zone_name}_h")
+        with col1:
+            x = st.number_input(f"{zone_name} X", key=f"{zone_name}_x", min_value=0.0, max_value=1.0, value=dx, step=0.01, format="%.4f")
+            w = st.number_input(f"{zone_name} W", key=f"{zone_name}_w", min_value=0.0, max_value=1.0, value=dw, step=0.01, format="%.4f")
+        with col2:
+            y = st.number_input(f"{zone_name} Y", key=f"{zone_name}_y", min_value=0.0, max_value=1.0, value=dy, step=0.01, format="%.4f")
+            h = st.number_input(f"{zone_name} H", key=f"{zone_name}_h", min_value=0.0, max_value=1.0, value=dh, step=0.01, format="%.4f")
+        zones[zone_name] = (x, y, w, h)
 
-        st.session_state["zones"][zone_name] = {"x": x, "y": y, "w": w, "h": h}
+with st.sidebar.expander("💾 Save / Load Presets", expanded=False):
+    if st.button("Save Current Preset"):
+        save_presets(zones)
+        st.success("✅ Preset saved!")
 
-    if st.button("💾 Save Zone Settings"):
-        save_settings(st.session_state["zones"])
-        st.success("Zone settings saved!")
+    if st.button("Load Preset"):
+        loaded = load_presets()
+        if loaded:
+            for k, v in loaded.items():
+                st.session_state[f"{k}_x"] = v[0]
+                st.session_state[f"{k}_y"] = v[1]
+                st.session_state[f"{k}_w"] = v[2]
+                st.session_state[f"{k}_h"] = v[3]
+            st.success("✅ Preset loaded!")
+        else:
+            st.warning("⚠️ No preset found.")
 
-# Ignore settings
+# --- Ignore Settings (text + zones combined) ---
 with st.sidebar.expander("🛑 Ignore Settings", expanded=False):
 
     # Load persistent ignore terms
     if "persistent_ignore_terms" not in st.session_state:
         st.session_state["persistent_ignore_terms"] = load_ignore_terms()
-    if "ignore_input" not in st.session_state:
-        st.session_state["ignore_input"] = ""
 
     ignore_input = st.text_area(
         "Enter words/phrases to ignore (comma separated):",
-        value=st.session_state["ignore_input"],
-        key="ignore_input_widget"
+        key="ignore_input"
     )
 
     if st.button("Apply Ignore Terms"):
@@ -78,9 +126,7 @@ with st.sidebar.expander("🛑 Ignore Settings", expanded=False):
         st.session_state["persistent_ignore_terms"].extend(new_terms)
         st.session_state["persistent_ignore_terms"] = sorted(set(st.session_state["persistent_ignore_terms"]))
         save_ignore_terms(st.session_state["persistent_ignore_terms"])
-        # safely clear input
-        st.session_state["ignore_input"] = ""
-        st.session_state["ignore_input_widget"] = ""
+        st.session_state["ignore_input"] = ""  # clear
         st.experimental_rerun()
 
     if st.session_state["persistent_ignore_terms"]:
@@ -88,71 +134,92 @@ with st.sidebar.expander("🛑 Ignore Settings", expanded=False):
         for term in st.session_state["persistent_ignore_terms"]:
             st.write(f"- {term}")
 
-    # Ignore Zone
-    if "ignore_zone" not in st.session_state:
-        st.session_state["ignore_zone"] = {"x": 0.0, "y": 0.0, "w": 0.2, "h": 0.1}
+    # --- Ignore Zone Definition ---
+    st.markdown("### Define Ignore Zone")
+    iz_x = st.number_input("Ignore Zone X", min_value=0.0, max_value=1.0, value=0.1149, step=0.01, format="%.4f")
+    iz_y = st.number_input("Ignore Zone Y", min_value=0.0, max_value=1.0, value=0.8958, step=0.01, format="%.4f")
+    iz_w = st.number_input("Ignore Zone W", min_value=0.0, max_value=1.0, value=0.8041, step=0.01, format="%.4f")
+    iz_h = st.number_input("Ignore Zone H", min_value=0.0, max_value=1.0, value=0.1959, step=0.01, format="%.4f")
+    ignore_zone = (iz_x, iz_y, iz_w, iz_h) if iz_w > 0 and iz_h > 0 else None
 
-    st.markdown("**Ignore Zone**")
-    col1, col2 = st.columns(2)
-    ix = col1.number_input("Ignore Zone X", 0.0, 1.0, st.session_state["ignore_zone"]["x"], 0.1149, format="%.4f", key="ignore_zone_x")
-    iy = col2.number_input("Ignore Zone Y", 0.0, 1.0, st.session_state["ignore_zone"]["y"], 0.8958, format="%.4f", key="ignore_zone_y")
-    iw = col1.number_input("Ignore Zone W", 0.0, 1.0, st.session_state["ignore_zone"]["w"], 0.8041, format="%.4f", key="ignore_zone_w")
-    ih = col2.number_input("Ignore Zone H", 0.0, 1.0, st.session_state["ignore_zone"]["h"], 0.1959, format="%.4f", key="ignore_zone_h")
-    st.session_state["ignore_zone"] = {"x": ix, "y": iy, "w": iw, "h": ih}
-
-# ===================== Main App =====================
-st.title("📊 Banner QA Tool (Aspect Ratio 8:3)")
-
-uploaded_file = st.file_uploader("Upload a banner image", type=["png", "jpg", "jpeg"])
-
+# --- Image Handling ---
 if uploaded_file:
-    image = Image.open(uploaded_file).convert("RGB")
-    img_array = np.array(image)
-    h, w, _ = img_array.shape
+    img = Image.open(uploaded_file).convert("RGB")
+    w, h = img.size
+    aspect_ratio = w / h
+    if abs(aspect_ratio - (8 / 3)) > 0.01:
+        st.warning(f"⚠️ Image aspect ratio {w}:{h} ({aspect_ratio:.2f}) is not 8:3. No scaling applied.")
+    else:
+        st.info("✅ Image aspect ratio is 8:3.")
 
-    results = reader.readtext(img_array)
+    draw = ImageDraw.Draw(img)
 
-    annotated = img_array.copy()
+    # Convert normalized zones -> pixel zones
+    abs_zones = {}
+    for name, (zx, zy, zw, zh) in zones.items():
+        abs_zones[name] = (
+            int(zx * w),
+            int(zy * h),
+            int(zw * w),
+            int(zh * h),
+        )
 
-    # Draw zones
-    for zone_name, params in st.session_state["zones"].items():
-        zx, zy, zw, zh = params["x"], params["y"], params["w"], params["h"]
-        x1, y1 = int(zx * w), int(zy * h)
-        x2, y2 = int((zx + zw) * w), int((zy + zh) * h)
-        cv2.rectangle(annotated, (x1, y1), (x2, y2), (0, 255, 0), 2)  # green box
+    abs_ignore_zone = None
+    if ignore_zone:
+        abs_ignore_zone = (
+            int(ignore_zone[0] * w),
+            int(ignore_zone[1] * h),
+            int(ignore_zone[2] * w),
+            int(ignore_zone[3] * h),
+        )
+        draw.rectangle(
+            [abs_ignore_zone[0], abs_ignore_zone[1],
+             abs_ignore_zone[0] + abs_ignore_zone[2],
+             abs_ignore_zone[1] + abs_ignore_zone[3]],
+            outline="blue", width=3
+        )
 
-    # Draw ignore zone
-    ix, iy, iw, ih = st.session_state["ignore_zone"].values()
-    ix1, iy1 = int(ix * w), int(iy * h)
-    ix2, iy2 = int((ix + iw) * w), int((iy + ih) * h)
-    cv2.rectangle(annotated, (ix1, iy1), (ix2, iy2), (255, 0, 0), 2)  # blue box
+    # OCR Detection
+    results = reader.readtext(np.array(img))
+    penalties = []
+    score = 100
+    used_zones = {z: False for z in abs_zones}
 
-    # Draw OCR results
-    ignored_texts = []
     for (bbox, text, prob) in results:
-        text_lower = text.lower()
+        detected_text = text.lower().strip()
+        xs = [int(p[0]) for p in bbox]
+        ys = [int(p[1]) for p in bbox]
+        tx, ty, tw, th = min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys)
 
-        # bounding box points
-        (tl, tr, br, bl) = bbox
-        tl = tuple(map(int, tl))
-        br = tuple(map(int, br))
+        # --- Check ignore terms ---
+        if any(term in detected_text for term in st.session_state["persistent_ignore_terms"]):
+            draw.rectangle([tx, ty, tx + tw, ty + th], outline="blue", width=3)
+            continue
 
-        # Check if inside ignore zone
-        cx, cy = (tl[0] + br[0]) // 2, (tl[1] + br[1]) // 2
-        inside_ignore_zone = ix1 <= cx <= ix2 and iy1 <= cy <= iy2
+        # --- Check ignore zone ---
+        if abs_ignore_zone:
+            izx, izy, izw, izh = abs_ignore_zone
+            if tx >= izx and ty >= izy and (tx + tw) <= (izx + izw) and (ty + th) <= (izy + izh):
+                draw.rectangle([tx, ty, tx + tw, ty + th], outline="blue", width=3)
+                continue
 
-        # Check ignore terms
-        ignore_term_match = any(term in text_lower for term in st.session_state["persistent_ignore_terms"])
+        # --- Otherwise process normally ---
+        draw.rectangle([tx, ty, tx + tw, ty + th], outline="red", width=2)
+        inside_any = False
+        for zone_name, (zx, zy, zw, zh) in abs_zones.items():
+            if tx >= zx and ty >= zy and (tx + tw) <= (zx + zw) and (ty + th) <= (zy + zh):
+                inside_any = True
+                used_zones[zone_name] = True
+                break
+        if not inside_any:
+            penalties.append(("Text outside allowed zones", 20))
+            score -= 20
 
-        if inside_ignore_zone or ignore_term_match:
-            cv2.rectangle(annotated, tl, br, (255, 0, 0), 2)
-            ignored_texts.append(text)
-        else:
-            cv2.rectangle(annotated, tl, br, (0, 0, 255), 2)
+    st.image(img, caption=f"QA Result – Score: {score}", use_container_width=True)
 
-    st.image(annotated, caption="Processed Image", use_container_width=True)
-
-    if ignored_texts:
-        st.subheader("📌 Ignored Texts:")
-        for t in ignored_texts:
-            st.write(f"- {t}")
+    if penalties:
+        st.error("Infractions:")
+        for p, pts in penalties:
+            st.write(f"- {p} (-{pts})")
+    else:
+        st.success("Perfect score! ✅ All text inside zones.")
