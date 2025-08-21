@@ -178,6 +178,13 @@ if uploaded_file:
             int(zw * w),
             int(zh * h),
         )
+    # --- Draw user-defined zones (green outlines) ---
+    for zone_name, (zx, zy, zw, zh) in abs_zones.items():
+        draw.rectangle(
+            [zx, zy, zx + zw, zy + zh],
+            outline="green", width=3
+        )
+        draw.text((zx, max(0, zy - 15)), zone_name, fill="green")
 
     abs_ignore_zone = None
     if ignore_zone:
