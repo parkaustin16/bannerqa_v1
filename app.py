@@ -180,10 +180,10 @@ with st.sidebar.expander("🛑 Ignore Settings", expanded=False):
     st.subheader("➕ Add Ignore Zone")
     with st.form("add_ignore_zone_form", clear_on_submit=True):
         zone_name = st.text_input("Zone Name", "")
-        x = st.number_input("X (%)", 0, 100, 0)
-        y = st.number_input("Y (%)", 0, 100, 0)
-        w = st.number_input("Width (%)", 0, 100, 10)
-        h = st.number_input("Height (%)", 0, 100, 10)
+        x = st.number_input("", min_value=0.0, max_value=1.0, value=0.1149, step=0.01, format="%.4f")
+        y = st.number_input("Y", min_value=0.0, max_value=1.0, value=0.8958, step=0.01, format="%.4f")
+        w = st.number_input("W", min_value=0.0, max_value=1.0, value=0.8041, step=0.01, format="%.4f")
+        h = st.number_input("H", min_value=0.0, max_value=1.0, value=0.1959, step=0.01, format="%.4f")
         add_zone_btn = st.form_submit_button("Add")
 
     if add_zone_btn and zone_name.strip():
