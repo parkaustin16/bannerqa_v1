@@ -262,8 +262,6 @@ if uploaded_file:
             if box_overlap(ocr_box, zone_box, threshold=overlap_threshold):
                 inside_any = True
                 used_zones[zone_name] = True
-                # ✅ Overwrite with green if valid
-                draw.rectangle([tx, ty, tx + tw, ty + th], outline="green", width=2)
                 break
 
         if inside_any:
