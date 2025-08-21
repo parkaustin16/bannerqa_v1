@@ -36,6 +36,7 @@ def box_overlap(b1, b2, threshold=0.3):
 # --- Config Files ---
 CONFIG_FILE = "zone_presets.json"
 IGNORE_FILE = "ignore_terms.json"
+IGNORE_ZONE_FILE = "ignore_zones.json"
 
 def save_presets(zones):
     try:
@@ -62,6 +63,25 @@ def load_ignore_terms():
         with open(IGNORE_FILE, "r") as f:
             return json.load(f)
     return []
+
+def load_ignore_zones():
+    if os.path.exists(IGNORE_ZONE_FILE):
+        try:
+            with open(IGNORE_ZONE_FILE, "r") as f:
+                return json.load(f)
+        except json.JSONDecodeError:
+            return []
+    return []
+
+def save_ignore_zones(zones):
+    try:
+        with open(IGNORE_ZONE_FILE, "w") as f:
+            json.dump(zones, f, indent=2)
+    except Exception as e:
+        st.error(f"⚠️ Failed to save ignore zones: {e}")
+
+if "ignore_zones" not in st.session_state:
+    st.session_state["ignore_zones"] = load_ignore_zones()
 
 # --- Default zones (normalized 0–1) ---
 default_zone_defs = {
@@ -157,12 +177,31 @@ with st.sidebar.expander("🛑 Ignore Settings", expanded=False):
         for term in st.session_state["persistent_ignore_terms"]:
             st.write(f"- {term}")
 
-    st.markdown("### Define Ignore Zone")
-    iz_x = st.number_input("Ignore Zone X", min_value=0.0, max_value=1.0, value=0.1149, step=0.01, format="%.4f")
-    iz_y = st.number_input("Ignore Zone Y", min_value=0.0, max_value=1.0, value=0.8958, step=0.01, format="%.4f")
-    iz_w = st.number_input("Ignore Zone W", min_value=0.0, max_value=1.0, value=0.8041, step=0.01, format="%.4f")
-    iz_h = st.number_input("Ignore Zone H", min_value=0.0, max_value=1.0, value=0.1959, step=0.01, format="%.4f")
-    ignore_zone = (iz_x, iz_y, iz_w, iz_h) if iz_w > 0 and iz_h > 0 else None
+    st.subheader("➕ Add Ignore Zone")
+    with st.form("add_ignore_zone_form", clear_on_submit=True):
+        zone_name = st.text_input("Zone Name", "")
+        x = st.number_input("X (%)", 0, 100, 0)
+        y = st.number_input("Y (%)", 0, 100, 0)
+        w = st.number_input("Width (%)", 0, 100, 10)
+        h = st.number_input("Height (%)", 0, 100, 10)
+        add_zone_btn = st.form_submit_button("Add")
+
+    if add_zone_btn and zone_name.strip():
+        new_zone = {
+            "name": zone_name.strip(),
+            "x": x,
+            "y": y,
+            "w": w,
+            "h": h
+        }
+        st.session_state["ignore_zones"].append(new_zone)
+        save_ignore_zones(st.session_state["ignore_zones"])
+        st.success(f"✅ Added ignore zone: {zone_name}")
+
+    if st.session_state["ignore_zones"]:
+        st.markdown("**Defined Ignore Zones:**")
+        for z in st.session_state["ignore_zones"]:
+            st.write(f"- {z['name']} ({z['x']}%, {z['y']}%, {z['w']}% × {z['h']}%)")
 
 # --- Image Handling ---
 if uploaded_file:
@@ -191,20 +230,13 @@ if uploaded_file:
         draw.rectangle([zx, zy, zx + zw, zy + zh], outline="green", width=3)
         draw.text((zx, max(0, zy - 15)), zone_name, fill="green")
 
-    abs_ignore_zone = None
-    if ignore_zone:
-        abs_ignore_zone = (
-            int(ignore_zone[0] * w),
-            int(ignore_zone[1] * h),
-            int(ignore_zone[2] * w),
-            int(ignore_zone[3] * h),
-        )
-        draw.rectangle(
-            [abs_ignore_zone[0], abs_ignore_zone[1],
-             abs_ignore_zone[0] + abs_ignore_zone[2],
-             abs_ignore_zone[1] + abs_ignore_zone[3]],
-            outline="blue", width=3
-        )
+    # --- Draw all ignore zones (blue outlines) ---
+    abs_ignore_zones = []
+    for z in st.session_state["ignore_zones"]:
+        izx, izy, izw, izh = int(z["x"] / 100 * w), int(z["y"] / 100 * h), int(z["w"] / 100 * w), int(z["h"] / 100 * h)
+        abs_ignore_zones.append((izx, izy, izw, izh))
+        draw.rectangle([izx, izy, izx + izw, izy + izh], outline="blue", width=3)
+        draw.text((izx, max(0, izy - 15)), z["name"], fill="blue")
 
     # OCR Detection
     results = reader.readtext(np.array(img))
@@ -224,12 +256,15 @@ if uploaded_file:
             draw.rectangle([tx, ty, tx + tw, ty + th], outline="blue", width=2)
             continue
 
-        # Ignore by zone
-        if abs_ignore_zone:
-            izx, izy, izw, izh = abs_ignore_zone
+        # Ignore by zones
+        ignored = False
+        for (izx, izy, izw, izh) in abs_ignore_zones:
             if tx >= izx and ty >= izy and (tx + tw) <= (izx + izw) and (ty + th) <= (izy + izh):
                 draw.rectangle([tx, ty, tx + tw, ty + th], outline="blue", width=2)
-                continue
+                ignored = True
+                break
+        if ignored:
+            continue
 
         # Normal OCR detection → red
         draw.rectangle([tx, ty, tx + tw, ty + th], outline="red", width=2)
