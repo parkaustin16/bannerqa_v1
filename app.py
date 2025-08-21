@@ -229,47 +229,40 @@ if uploaded_file:
         )
 
     # OCR Detection
-    results = reader.readtext(np.array(img))
-    penalties = []
-    score = 100
-    used_zones = {z: False for z in abs_zones}
-
+    infractions = []
+    ignored_texts = []
     for (bbox, text, prob) in results:
-        detected_text = text.lower().strip()
-        xs = [int(p[0]) for p in bbox]
-        ys = [int(p[1]) for p in bbox]
-        tx, ty, tw, th = min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys)
-        ocr_box = (tx, ty, tw, th)
+        text_clean = text.strip()
+        (top_left, top_right, bottom_right, bottom_left) = bbox
+        x_min, y_min = int(top_left[0]), int(top_left[1])
+        x_max, y_max = int(bottom_right[0]), int(bottom_right[1])
 
-        # --- Ignore by terms ---
-        if any(term in detected_text for term in st.session_state["persistent_ignore_terms"]):
-            draw.rectangle([tx, ty, tx + tw, ty + th], outline="blue", width=3)
+        # --- Ignore text terms (BLUE) ---
+        if any(term.lower() in text_clean.lower() for term in st.session_state.ignore_list):
+            draw.rectangle([x_min, y_min, x_max, y_max], outline="blue", width=2)
+            ignored_texts.append(text_clean)
             continue
 
-        # --- Ignore by zone ---
-        if abs_ignore_zone:
-            izx, izy, izw, izh = abs_ignore_zone
-            if tx >= izx and ty >= izy and (tx + tw) <= (izx + izw) and (ty + th) <= (izy + izh):
-                draw.rectangle([tx, ty, tx + tw, ty + th], outline="blue", width=3)
-                continue
+        # --- Ignore zone (BLUE) ---
+        if (ix1 <= x_min <= ix2 and iy1 <= y_min <= iy2) or (ix1 <= x_max <= ix2 and iy1 <= y_max <= iy2):
+            draw.rectangle([x_min, y_min, x_max, y_max], outline="blue", width=2)
+            ignored_texts.append(text_clean)
+            continue
 
-        # --- Check defined zones (using overlap, not strict containment) ---
-        inside_any = False
-        for zone_name, (zx, zy, zw, zh) in abs_zones.items():
-            zone_box = (zx, zy, zw, zh)
-            if box_overlap(ocr_box, zone_box, threshold=overlap_threshold):
-                inside_any = True
-                used_zones[zone_name] = True
-                # ✅ Green box for valid placement
-                draw.rectangle([tx, ty, tx + tw, ty + th], outline="green", width=2)
+        # --- Regular OCR detection (RED) ---
+        draw.rectangle([x_min, y_min, x_max, y_max], outline="red", width=2)
+
+        # --- Zone validation ---
+        found_zone = None
+        for zone_name, params in zones.items():
+            zx1, zy1 = int(params["x"] * w), int(params["y"] * h)
+            zx2, zy2 = int((params["x"] + params["w"]) * w), int((params["y"] + params["h"]) * h)
+            if zx1 <= x_min <= zx2 and zy1 <= y_min <= zy2:
+                found_zone = zone_name
                 break
 
-        if not inside_any:
-            # ❌ Red box = text outside allowed zones
-            draw.rectangle([tx, ty, tx + tw, ty + th], outline="red", width=2)
-            penalties.append((f"Text outside allowed zones: '{text}'", 20))
-            score -= 20
-
+        if not found_zone:
+            infractions.append(f"Text '{text_clean}' is outside defined zones.")
     # --- Check for missing zone coverage ---
     for zone_name, used in used_zones.items():
         if not used:
