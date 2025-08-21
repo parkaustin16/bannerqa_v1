@@ -205,35 +205,42 @@ if uploaded_file:
         xs = [int(p[0]) for p in bbox]
         ys = [int(p[1]) for p in bbox]
         tx, ty, tw, th = min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys)
+        ocr_box = (tx, ty, tw, th)
 
-        # --- Check ignore terms ---
+        # --- Ignore by terms ---
         if any(term in detected_text for term in st.session_state["persistent_ignore_terms"]):
             draw.rectangle([tx, ty, tx + tw, ty + th], outline="blue", width=3)
             continue
 
-        # --- Check ignore zone ---
+        # --- Ignore by zone ---
         if abs_ignore_zone:
             izx, izy, izw, izh = abs_ignore_zone
             if tx >= izx and ty >= izy and (tx + tw) <= (izx + izw) and (ty + th) <= (izy + izh):
                 draw.rectangle([tx, ty, tx + tw, ty + th], outline="blue", width=3)
                 continue
 
-        # --- Otherwise process normally ---
+        # --- Check defined zones (using overlap, not strict containment) ---
         inside_any = False
         for zone_name, (zx, zy, zw, zh) in abs_zones.items():
-            if tx >= zx and ty >= zy and (tx + tw) <= (zx + zw) and (ty + th) <= (zy + zh):
+            zone_box = (zx, zy, zw, zh)
+            if box_overlap(ocr_box, zone_box, threshold=overlap_threshold):
                 inside_any = True
                 used_zones[zone_name] = True
+                # ✅ Green box for valid placement
+                draw.rectangle([tx, ty, tx + tw, ty + th], outline="green", width=2)
                 break
 
-        if inside_any:
-            # ✅ Green box for valid text inside a zone
-            draw.rectangle([tx, ty, tx + tw, ty + th], outline="green", width=2)
-        else:
-            # ❌ Red box for invalid placement
+        if not inside_any:
+            # ❌ Red box = text outside allowed zones
             draw.rectangle([tx, ty, tx + tw, ty + th], outline="red", width=2)
-            penalties.append(("Text outside allowed zones", 20))
+            penalties.append((f"Text outside allowed zones: '{text}'", 20))
             score -= 20
+
+    # --- Check for missing zone coverage ---
+    for zone_name, used in used_zones.items():
+        if not used:
+            penalties.append((f"No text found in {zone_name}", 10))
+            score -= 10
 
     st.image(img, caption=f"QA Result – Score: {score}", use_container_width=True)
 
