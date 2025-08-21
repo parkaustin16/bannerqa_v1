@@ -179,6 +179,25 @@ with st.sidebar.expander("🛑 Ignore Settings", expanded=False):
             st.session_state.ignore_list = list(set(st.session_state.ignore_list))  # dedupe
             st.session_state.ignore_input = ""
             st.rerun()
+    from PIL import Image
+
+    # Convert uploaded image to PIL before passing to st_canvas
+    if isinstance(uploaded_file, np.ndarray):
+        pil_bg = Image.fromarray(uploaded_file)
+    else:
+        pil_bg = uploaded_file
+
+    canvas_result = st_canvas(
+        fill_color="rgba(0, 0, 255, 0.3)",  # semi-transparent blue
+        stroke_width=2,
+        stroke_color="blue",
+        background_image=pil_bg,  # ✅ safe now
+        update_streamlit=True,
+        height=pil_bg.height,
+        width=pil_bg.width,
+        drawing_mode="rect",
+        key="ignore_canvas",
+    )
 
     if st.session_state["persistent_ignore_terms"]:
         st.markdown("**Ignored Texts (Persistent):**")
