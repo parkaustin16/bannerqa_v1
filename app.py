@@ -181,12 +181,12 @@ with st.sidebar.expander("🛑 Ignore Settings", expanded=False):
             st.rerun()
     from PIL import Image
 
-    if uploaded_image is not None:
+    if uploaded_file is not None:
         # Convert uploaded image to PIL
-        if isinstance(uploaded_image, np.ndarray):
-            pil_bg = Image.fromarray(uploaded_image)
+        if isinstance(uploaded_file, np.ndarray):
+            pil_bg = Image.fromarray(uploaded_file)
         else:
-            pil_bg = uploaded_image
+            pil_bg = uploaded_file
 
         canvas_result = st_canvas(
             fill_color="rgba(0, 0, 255, 0.3)",  # semi-transparent blue
