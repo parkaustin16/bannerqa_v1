@@ -23,8 +23,8 @@ reader = load_reader()
 
 # --- Cached OCR function ---
 @st.cache_data
-def run_ocr(img_bytes):
-    img = Image.open(img_bytes).convert("RGB")
+def run_ocr(img: Image.Image):
+    """Run OCR on a PIL image and return results."""
     return reader.readtext(np.array(img))
 
 # --- Overlap helper function ---
@@ -174,89 +174,55 @@ with st.sidebar.expander("🛑 Ignore Settings", expanded=False):
 
     if st.button("Apply Ignore Texts"):
         if ignore_input.strip():
-            new_items = [i.strip() for i in ignore_input.split(",") if i.strip()]
+            new_items = [i.strip().lower() for i in ignore_input.split(",") if i.strip()]
             st.session_state.ignore_list.extend(new_items)
             st.session_state.ignore_list = list(set(st.session_state.ignore_list))  # dedupe
             st.session_state.ignore_input = ""
             st.rerun()
-    from PIL import Image
 
     if uploaded_file is not None:
-        # Convert uploaded image to PIL
-        if isinstance(uploaded_file, np.ndarray):
-            pil_bg = Image.fromarray(uploaded_file)
-        else:
-            pil_bg = uploaded_file
+        uploaded_file.seek(0)
+        pil_bg = Image.open(uploaded_file).convert("RGB")
 
+        st.subheader("➕ Draw Ignore Zones")
         canvas_result = st_canvas(
             fill_color="rgba(0, 0, 255, 0.3)",  # semi-transparent blue
             stroke_width=2,
             stroke_color="blue",
-            background_image=pil_bg,  # ✅ safe now
+            background_image=pil_bg,
             update_streamlit=True,
             height=pil_bg.height,
             width=pil_bg.width,
             drawing_mode="rect",
-            key="ignore_canvas",
+            key="ignore_canvas_drawn",
         )
-    else:
-        canvas_result = None
 
-    # Convert uploaded image to PIL before passing to st_canvas
-    if isinstance(uploaded_file, np.ndarray):
-        pil_bg = Image.fromarray(uploaded_file)
-    else:
-        pil_bg = uploaded_file
+        if canvas_result.json_data is not None:
+            objects = canvas_result.json_data.get("objects", [])
+            new_zones = []
+            for i, obj in enumerate(objects):
+                if obj["type"] == "rect":
+                    x = obj["left"] / pil_bg.width
+                    y = obj["top"] / pil_bg.height
+                    w = obj["width"] / pil_bg.width
+                    h = obj["height"] / pil_bg.height
+                    new_zones.append({
+                        "name": f"Drawn Zone {i+1}",
+                        "x": x, "y": y, "w": w, "h": h
+                    })
 
-    canvas_result = st_canvas(
-        fill_color="rgba(0, 0, 255, 0.3)",  # semi-transparent blue
-        stroke_width=2,
-        stroke_color="blue",
-        background_image=pil_bg,  # ✅ safe now
-        update_streamlit=True,
-        height=pil_bg.height,
-        width=pil_bg.width,
-        drawing_mode="rect",
-        key="ignore_canvas",
-    )
+            if new_zones and st.button("💾 Save Drawn Zones"):
+                st.session_state["ignore_zones"].extend(new_zones)
+                save_ignore_zones(st.session_state["ignore_zones"])
+                st.success("✅ Drawn zones saved!")
+                st.rerun()
 
     if st.session_state["persistent_ignore_terms"]:
         st.markdown("**Ignored Texts (Persistent):**")
         for term in st.session_state["persistent_ignore_terms"]:
             st.write(f"- {term}")
 
-    # 👇 Fixed drawing canvas for ignore zones
-    if uploaded_file:
-        st.subheader("➕ Draw Ignore Zones")
-        img = Image.open(uploaded_file).convert("RGB")
-        canvas_result = st_canvas(
-            fill_color="rgba(0, 0, 255, 0.3)",  # semi-transparent blue
-            stroke_color="blue",
-            background_image=np.array(img),  # ✅ FIX: pass numpy array instead of PIL
-            update_streamlit=True,
-            height=img.height,
-            width=img.width,
-            drawing_mode="rect",
-            key="ignore_canvas",
-        )
-
-        if canvas_result.json_data is not None:
-            objects = canvas_result.json_data["objects"]
-            new_zones = []
-            for i, obj in enumerate(objects):
-                if obj["type"] == "rect":
-                    x = obj["left"] / img.width
-                    y = obj["top"] / img.height
-                    w = obj["width"] / img.width
-                    h = obj["height"] / img.height
-                    new_zones.append({"name": f"Drawn Zone {i+1}", "x": x, "y": y, "w": w, "h": h})
-            if st.button("💾 Save Drawn Zones"):
-                st.session_state["ignore_zones"].extend(new_zones)
-                save_ignore_zones(st.session_state["ignore_zones"])
-                st.success("✅ Drawn zones saved!")
-                st.rerun()
-
-    # Existing manual form (kept intact)
+    # --- Manual ignore zone form ---
     st.subheader("➕ Add Ignore Zone Manually")
     with st.form("add_ignore_zone_form", clear_on_submit=True):
         zone_name = st.text_input("Zone Name", "")
@@ -275,17 +241,18 @@ with st.sidebar.expander("🛑 Ignore Settings", expanded=False):
     if st.session_state["ignore_zones"]:
         st.markdown("**Defined Ignore Zones:**")
         for idx, z in enumerate(st.session_state["ignore_zones"]):
-            col1, col2 = st.columns([4,1])
+            col1, col2 = st.columns([4, 1])
             with col1:
                 st.write(f"- {z['name']} ({z['x']:.3f}, {z['y']:.3f}, {z['w']:.3f} × {z['h']:.3f})")
             with col2:
-                if st.button(f"🗑 Delete", key=f"del_ignore_{idx}"):
+                if st.button("🗑 Delete", key=f"del_ignore_{idx}"):
                     st.session_state["ignore_zones"].pop(idx)
                     save_ignore_zones(st.session_state["ignore_zones"])
                     st.rerun()
 
 # --- Image Handling ---
 if uploaded_file:
+    uploaded_file.seek(0)
     img = Image.open(uploaded_file).convert("RGB")
     w, h = img.size
     aspect_ratio = w / h
@@ -315,7 +282,7 @@ if uploaded_file:
         draw.text((izx, max(0, izy - 15)), z["name"], fill="blue")
 
     # --- Cached OCR call ---
-    results = run_ocr(uploaded_file)
+    results = run_ocr(img)
 
     penalties = []
     score = 100
