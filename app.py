@@ -186,6 +186,7 @@ if uploaded_file:
         )
         draw.text((zx, max(0, zy - 15)), zone_name, fill="green")
 
+
     abs_ignore_zone = None
     if ignore_zone:
         abs_ignore_zone = (
