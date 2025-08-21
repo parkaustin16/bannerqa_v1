@@ -131,7 +131,7 @@ if uploaded_file:
     score = 100
     used_zones = {z: False for z in abs_zones}
 
-    # --- Ignore text rules ---
+    # --- Ignore text rules (always visible in sidebar) ---
     with st.sidebar.expander("🚫 Ignore Text Rules", expanded=False):
         st.text_area(
             "Enter words/phrases to ignore (comma separated):",
