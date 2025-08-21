@@ -4,7 +4,8 @@ import easyocr
 import numpy as np
 import json
 import os
-from streamlit_drawable_canvas import st_canvas  # 👈 NEW
+from streamlit_drawable_canvas import st_canvas  # 👈 drawing support
+
 
 st.set_page_config(page_title="Banner QA – Text Zone Validation", layout="wide")
 
@@ -184,14 +185,14 @@ with st.sidebar.expander("🛑 Ignore Settings", expanded=False):
         for term in st.session_state["persistent_ignore_terms"]:
             st.write(f"- {term}")
 
-    # 👇 New drawing canvas for ignore zones
+    # 👇 Fixed drawing canvas for ignore zones
     if uploaded_file:
         st.subheader("➕ Draw Ignore Zones")
         img = Image.open(uploaded_file).convert("RGB")
         canvas_result = st_canvas(
             fill_color="rgba(0, 0, 255, 0.3)",  # semi-transparent blue
             stroke_color="blue",
-            background_image=img,
+            background_image=np.array(img),  # ✅ FIX: pass numpy array instead of PIL
             update_streamlit=True,
             height=img.height,
             width=img.width,
