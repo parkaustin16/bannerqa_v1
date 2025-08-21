@@ -9,6 +9,13 @@ st.set_page_config(page_title="Banner QA – Text Zone Validation", layout="wide
 
 st.title("Banner QA – Text Zone Validation")
 
+# --- Initialize session state for ignore input and terms ---
+if "ignore_input" not in st.session_state:
+    st.session_state["ignore_input"] = ""
+if "ignore_terms" not in st.session_state:
+    # Default persistent ignore list
+    st.session_state["ignore_terms"] = ["oled", "trademark", "draft"]
+
 # --- File uploader ---
 uploaded_file = st.file_uploader("Upload a banner", type=["png", "jpg", "jpeg"])
 
@@ -54,33 +61,7 @@ def load_presets():
             return json.load(f)
     return {}
 
-# --- Ignore Terms Presets ---
-IGNORE_FILE = "ignore_presets.json"
-
-def save_ignore_terms(terms):
-    with open(IGNORE_FILE, "w") as f:
-        json.dump(terms, f, indent=4)
-
-def load_ignore_terms():
-    if os.path.exists(IGNORE_FILE):
-        with open(IGNORE_FILE, "r") as f:
-            return json.load(f)
-    return []
-
-# Load default ignore terms into session state
-if "ignore_terms" not in st.session_state:
-    st.session_state["ignore_terms"] = load_ignore_terms()
-
-st.sidebar.title("⚙️ Zone Settings")
-
-# --- Overlap Threshold Control ---
-with st.sidebar.expander("🔎 Detection Settings", expanded=True):
-    overlap_threshold = st.slider(
-        "Minimum overlap (%) for text to count as inside a zone",
-        min_value=0.0, max_value=1.0, value=0.8, step=0.01, format="%.2f"
-    )
-
-# --- Zone Inputs ---
+# --- Default zones (normalized 0–1) ---
 default_zone_defs = {
     "Eyebrow Copy": (0.125, 0.1042, 0.3047, 0.021),
     "Headline Copy": (0.125, 0.1458, 0.3047, 0.1458),
@@ -92,8 +73,18 @@ loaded_presets = load_presets()
 if loaded_presets:
     default_zone_defs = loaded_presets
 
+st.sidebar.title("⚙️ Zone Settings")
+
+# --- Overlap Threshold Control ---
+with st.sidebar.expander("🔎 Detection Settings", expanded=False):
+    overlap_threshold = st.slider(
+        "Minimum overlap (%) for text to count as inside a zone",
+        min_value=0.0, max_value=1.0, value=0.8, step=0.01, format="%.2f"
+    )
+
+# --- Zone Inputs ---
 zones = {}
-with st.sidebar.expander("📐 Define Text Zones", expanded=True):
+with st.sidebar.expander("📐 Define Text Zones", expanded=False):
     for zone_name, defaults in default_zone_defs.items():
         dx, dy, dw, dh = defaults
         st.markdown(f"**{zone_name}** (normalized 0–1 for width & height)")
@@ -123,38 +114,24 @@ with st.sidebar.expander("💾 Save / Load Presets", expanded=False):
         else:
             st.warning("⚠️ No preset found.")
 
-# --- Ignore Text Rules ---
-st.sidebar.markdown("## Ignore Text Rules")
+# --- Ignore Terms Section ---
+with st.sidebar.expander("🚫 Ignore Text Rules", expanded=False):
+    ignore_terms_input = st.text_area(
+        "Enter words/phrases to ignore (comma separated):",
+        key="ignore_input",
+        help="Example: OLED, Trademark, Draft"
+    )
 
-ignore_terms_input = st.sidebar.text_area(
-    "Enter words/phrases to ignore (comma separated):",
-    value="",
-    help="Example: OLED, Trademark, Draft",
-    key="ignore_input"
-)
+    if st.button("Apply Ignore Terms"):
+        new_terms = [term.strip().lower() for term in st.session_state["ignore_input"].split(",") if term.strip()]
+        st.session_state["ignore_terms"].extend(new_terms)
+        st.session_state["ignore_terms"] = list(set(st.session_state["ignore_terms"]))  # deduplicate
+        st.session_state["ignore_input"] = ""  # clear box safely
 
-if st.sidebar.button("Apply Ignore Terms"):
-    # Process new terms
-    new_terms = [
-        term.strip().lower()
-        for term in ignore_terms_input.split(",")
-        if term.strip()
-    ]
-    # Merge with existing + deduplicate
-    st.session_state["ignore_terms"] = list(set(st.session_state["ignore_terms"] + new_terms))
-    save_ignore_terms(st.session_state["ignore_terms"])  # persist
-    st.session_state["ignore_input"] = ""  # clear box
-
-if st.sidebar.button("Clear Ignore List"):
-    st.session_state["ignore_terms"] = []
-    save_ignore_terms([])  # persist clear
-    st.success("🗑️ Ignore list cleared!")
-
-ignore_terms = st.session_state["ignore_terms"]
-ignored_texts = []
-
-if ignore_terms:
-    st.info(f"🔎 Ignoring text matches for: {', '.join(ignore_terms)}")
+    if st.session_state["ignore_terms"]:
+        st.write("**Ignored Texts (Persistent):**")
+        for term in st.session_state["ignore_terms"]:
+            st.write(f"- {term}")
 
 # --- Image Handling ---
 if uploaded_file:
@@ -184,19 +161,20 @@ if uploaded_file:
     score = 100
     used_zones = {z: False for z in abs_zones}
 
-    # --- OCR Processing ---
+    # Draw and check zones
+    for zone_name, (zx, zy, zw, zh) in abs_zones.items():
+        draw.rectangle([zx, zy, zx + zw, zy + zh], outline="green", width=3)
+
+    # Process detected text
     for (bbox, text, prob) in results:
         detected_text = text.lower().strip()
 
         # --- Check if ignored ---
-        if any(term in detected_text for term in ignore_terms):
+        if any(term in detected_text for term in st.session_state["ignore_terms"]):
             xs = [int(p[0]) for p in bbox]
             ys = [int(p[1]) for p in bbox]
             tx, ty, tw, th = min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys)
-
-            # Draw ignored (blue) box
             draw.rectangle([tx, ty, tx + tw, ty + th], outline="blue", width=3)
-            ignored_texts.append(text)
             continue  # Skip penalties & zone checks
 
         # --- Otherwise process normally ---
@@ -206,7 +184,7 @@ if uploaded_file:
 
         draw.rectangle([tx, ty, tx + tw, ty + th], outline="red", width=2)
 
-        # ✅ FIX: use abs_zones (pixels) instead of zones (normalized)
+        # Zone validation
         inside_any = False
         for zone_name, (zx, zy, zw, zh) in abs_zones.items():
             if box_overlap((tx, ty, tw, th), (zx, zy, zw, zh), threshold=overlap_threshold):
@@ -218,10 +196,8 @@ if uploaded_file:
             penalties.append(("Text outside allowed zones", 20))
             score -= 20
 
-    # Draw green outlines for zones + mark unused ones
+    # Report unused zones
     for zone_name, used in used_zones.items():
-        zx, zy, zw, zh = abs_zones[zone_name]
-        draw.rectangle([zx, zy, zx + zw, zy + zh], outline="green", width=3)
         if not used:
             st.write(f"No text found in {zone_name}")
 
