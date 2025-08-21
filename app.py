@@ -136,7 +136,7 @@ with st.sidebar.expander("🛑 Ignore Settings", expanded=False):
 
     # --- Ignore Zone Definition ---
     st.markdown("### Define Ignore Zone")
-    iz_x = st.number_input("Ignore Zone X", min_value=0.0, max_value=1.0, value=0.1216, step=0.01, format="%.4f")
+    iz_x = st.number_input("Ignore Zone X", min_value=0.0, max_value=1.0, value=0.1149, step=0.01, format="%.4f")
     iz_y = st.number_input("Ignore Zone Y", min_value=0.0, max_value=1.0, value=0.8958, step=0.01, format="%.4f")
     iz_w = st.number_input("Ignore Zone W", min_value=0.0, max_value=1.0, value=0.8041, step=0.01, format="%.4f")
     iz_h = st.number_input("Ignore Zone H", min_value=0.0, max_value=1.0, value=0.1959, step=0.01, format="%.4f")
