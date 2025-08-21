@@ -68,6 +68,14 @@ loaded_presets = load_presets()
 if loaded_presets:
     default_zone_defs = loaded_presets
 
+# --- Initialize session_state with defaults/presets ---
+for zone_name, defaults in default_zone_defs.items():
+    dx, dy, dw, dh = defaults
+    for suffix, val in zip(["x", "y", "w", "h"], [dx, dy, dw, dh]):
+        key = f"{zone_name}_{suffix}"
+        if key not in st.session_state:
+            st.session_state[key] = val
+
 st.sidebar.title("⚙️ Zone Settings")
 
 # --- Overlap Threshold Control ---
@@ -211,14 +219,19 @@ if uploaded_file:
                 continue
 
         # --- Otherwise process normally ---
-        draw.rectangle([tx, ty, tx + tw, ty + th], outline="red", width=2)
         inside_any = False
         for zone_name, (zx, zy, zw, zh) in abs_zones.items():
             if tx >= zx and ty >= zy and (tx + tw) <= (zx + zw) and (ty + th) <= (zy + zh):
                 inside_any = True
                 used_zones[zone_name] = True
                 break
-        if not inside_any:
+
+        if inside_any:
+            # ✅ Green box for valid text inside a zone
+            draw.rectangle([tx, ty, tx + tw, ty + th], outline="green", width=2)
+        else:
+            # ❌ Red box for invalid placement
+            draw.rectangle([tx, ty, tx + tw, ty + th], outline="red", width=2)
             penalties.append(("Text outside allowed zones", 20))
             score -= 20
 
