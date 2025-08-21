@@ -43,8 +43,11 @@ IGNORE_FILE = "ignore_terms.json"
 
 
 def save_presets(zones):
-    with open(CONFIG_FILE, "w") as f:
-        json.dump(zones, f, indent=4)
+    try:
+        with open(CONFIG_FILE, "w") as f:
+            json.dump(zones, f, indent=4)
+    except Exception as e:
+        st.error(f"⚠️ Failed to save presets: {e}")
 
 
 def load_presets():
@@ -55,8 +58,11 @@ def load_presets():
 
 
 def save_ignore_terms(terms):
-    with open(IGNORE_FILE, "w") as f:
-        json.dump(terms, f, indent=4)
+    try:
+        with open(IGNORE_FILE, "w") as f:
+            json.dump(terms, f, indent=4)
+    except Exception as e:
+        st.error(f"⚠️ Failed to save ignore terms: {e}")
 
 
 def load_ignore_terms():
@@ -155,7 +161,12 @@ with st.sidebar.expander("🛑 Ignore Settings", expanded=False):
             "ignore_input": "",
             "ignore_input_widget": ""
         })
-        st.rerun()
+
+        # --- rerun fallback (supports old & new Streamlit) ---
+        if hasattr(st, "rerun"):
+            st.rerun()
+        else:
+            st.experimental_rerun()
 
     if st.session_state["persistent_ignore_terms"]:
         st.markdown("**Ignored Texts (Persistent):**")
