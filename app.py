@@ -12,15 +12,12 @@ st.title("Banner QA – Text Zone Validation")
 # --- File uploader ---
 uploaded_file = st.file_uploader("Upload a banner", type=["png", "jpg", "jpeg"])
 
-
 # --- OCR Reader (cache to avoid reloading) ---
 @st.cache_resource
 def load_reader():
     return easyocr.Reader(["en"])
 
-
 reader = load_reader()
-
 
 # --- Overlap helper function ---
 def box_overlap(b1, b2, threshold=0.3):
@@ -36,11 +33,9 @@ def box_overlap(b1, b2, threshold=0.3):
     ocr_area = w1 * h1
     return inter_area / ocr_area >= threshold
 
-
 # --- Config Files ---
 CONFIG_FILE = "zone_presets.json"
 IGNORE_FILE = "ignore_terms.json"
-
 
 def save_presets(zones):
     try:
@@ -49,13 +44,11 @@ def save_presets(zones):
     except Exception as e:
         st.error(f"⚠️ Failed to save presets: {e}")
 
-
 def load_presets():
     if os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE, "r") as f:
             return json.load(f)
     return {}
-
 
 def save_ignore_terms(terms):
     try:
@@ -64,13 +57,11 @@ def save_ignore_terms(terms):
     except Exception as e:
         st.error(f"⚠️ Failed to save ignore terms: {e}")
 
-
 def load_ignore_terms():
     if os.path.exists(IGNORE_FILE):
         with open(IGNORE_FILE, "r") as f:
             return json.load(f)
     return []
-
 
 # --- Default zones (normalized 0–1) ---
 default_zone_defs = {
@@ -139,14 +130,13 @@ with st.sidebar.expander("💾 Save / Load Presets", expanded=False):
 
 if "ignore_list" not in st.session_state:
     st.session_state.ignore_list = []
+
 # --- Ignore Settings (text + zones combined) ---
 with st.sidebar.expander("🛑 Ignore Settings", expanded=False):
-    # Load persistent ignore terms
     if "persistent_ignore_terms" not in st.session_state:
         st.session_state["persistent_ignore_terms"] = load_ignore_terms()
     if "ignore_input" not in st.session_state:
         st.session_state["ignore_input"] = ""
-
 
     ignore_input = st.text_area(
         "Enter words/phrases to ignore (comma separated):",
@@ -159,20 +149,14 @@ with st.sidebar.expander("🛑 Ignore Settings", expanded=False):
             new_items = [i.strip() for i in ignore_input.split(",") if i.strip()]
             st.session_state.ignore_list.extend(new_items)
             st.session_state.ignore_list = list(set(st.session_state.ignore_list))  # dedupe
-            st.session_state.ignore_input = ""  # ✅ safe way to clear
+            st.session_state.ignore_input = ""
             st.rerun()
-        # safely clear input
-        st.session_state.update({
-            "ignore_input": "",
-            "ignore_input_widget": ""
-        })
 
     if st.session_state["persistent_ignore_terms"]:
         st.markdown("**Ignored Texts (Persistent):**")
         for term in st.session_state["persistent_ignore_terms"]:
             st.write(f"- {term}")
 
-    # --- Ignore Zone Definition ---
     st.markdown("### Define Ignore Zone")
     iz_x = st.number_input("Ignore Zone X", min_value=0.0, max_value=1.0, value=0.1149, step=0.01, format="%.4f")
     iz_y = st.number_input("Ignore Zone Y", min_value=0.0, max_value=1.0, value=0.8958, step=0.01, format="%.4f")
@@ -201,12 +185,10 @@ if uploaded_file:
             int(zw * w),
             int(zh * h),
         )
+
     # --- Draw user-defined zones (green outlines) ---
     for zone_name, (zx, zy, zw, zh) in abs_zones.items():
-        draw.rectangle(
-            [zx, zy, zx + zw, zy + zh],
-            outline="green", width=3
-        )
+        draw.rectangle([zx, zy, zx + zw, zy + zh], outline="green", width=3)
         draw.text((zx, max(0, zy - 15)), zone_name, fill="green")
 
     abs_ignore_zone = None
@@ -237,21 +219,20 @@ if uploaded_file:
         tx, ty, tw, th = min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys)
         ocr_box = (tx, ty, tw, th)
 
-        color = "red"  # default for OCR
-
-        # --- Ignore by terms ---
+        # Ignore by terms
         if any(term in detected_text for term in st.session_state["persistent_ignore_terms"]):
-            color = "blue"
+            draw.rectangle([tx, ty, tx + tw, ty + th], outline="blue", width=2)
+            continue
 
-        # --- Ignore by zone ---
+        # Ignore by zone
         if abs_ignore_zone:
             izx, izy, izw, izh = abs_ignore_zone
             if tx >= izx and ty >= izy and (tx + tw) <= (izx + izw) and (ty + th) <= (izy + izh):
-                color = "blue"
+                draw.rectangle([tx, ty, tx + tw, ty + th], outline="blue", width=2)
+                continue
 
-        # --- Always draw OCR (red or blue), user zones are already green ---
-        draw.rectangle([tx, ty, tx + tw, ty + th], outline=color, width=2)
-        draw.text((tx, max(0, ty - 12)), text, fill=color)
+        # Normal OCR detection → red
+        draw.rectangle([tx, ty, tx + tw, ty + th], outline="red", width=2)
 
         inside_any = False
         for zone_name, (zx, zy, zw, zh) in abs_zones.items():
@@ -261,10 +242,7 @@ if uploaded_file:
                 used_zones[zone_name] = True
                 break
 
-        if inside_any:
-            # no penalty if inside a zone
-            pass
-        else:
+        if not inside_any:
             penalties.append((f"Text outside allowed zones: '{text}'", 20))
             score -= 20
 
