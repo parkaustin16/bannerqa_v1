@@ -12,11 +12,15 @@ st.title("Banner QA – Text Zone Validation")
 # --- File uploader ---
 uploaded_file = st.file_uploader("Upload a banner", type=["png", "jpg", "jpeg"])
 
+
 # --- OCR Reader (cache to avoid reloading) ---
 @st.cache_resource
 def load_reader():
     return easyocr.Reader(["en"])
+
+
 reader = load_reader()
+
 
 # --- Overlap helper function ---
 def box_overlap(b1, b2, threshold=0.3):
@@ -32,13 +36,16 @@ def box_overlap(b1, b2, threshold=0.3):
     ocr_area = w1 * h1
     return inter_area / ocr_area >= threshold
 
+
 # --- Config Files ---
 CONFIG_FILE = "zone_presets.json"
 IGNORE_FILE = "ignore_terms.json"
 
+
 def save_presets(zones):
     with open(CONFIG_FILE, "w") as f:
         json.dump(zones, f, indent=4)
+
 
 def load_presets():
     if os.path.exists(CONFIG_FILE):
@@ -46,15 +53,18 @@ def load_presets():
             return json.load(f)
     return {}
 
+
 def save_ignore_terms(terms):
     with open(IGNORE_FILE, "w") as f:
         json.dump(terms, f, indent=4)
+
 
 def load_ignore_terms():
     if os.path.exists(IGNORE_FILE):
         with open(IGNORE_FILE, "r") as f:
             return json.load(f)
     return []
+
 
 # --- Default zones (normalized 0–1) ---
 default_zone_defs = {
@@ -93,11 +103,15 @@ with st.sidebar.expander("📐 Define Text Zones", expanded=False):
         st.markdown(f"**{zone_name}** (normalized 0–1 for width & height)")
         col1, col2 = st.columns(2)
         with col1:
-            x = st.number_input(f"{zone_name} X", key=f"{zone_name}_x", min_value=0.0, max_value=1.0, value=dx, step=0.01, format="%.4f")
-            w = st.number_input(f"{zone_name} W", key=f"{zone_name}_w", min_value=0.0, max_value=1.0, value=dw, step=0.01, format="%.4f")
+            x = st.number_input(f"{zone_name} X", key=f"{zone_name}_x", min_value=0.0, max_value=1.0, value=dx,
+                                step=0.01, format="%.4f")
+            w = st.number_input(f"{zone_name} W", key=f"{zone_name}_w", min_value=0.0, max_value=1.0, value=dw,
+                                step=0.01, format="%.4f")
         with col2:
-            y = st.number_input(f"{zone_name} Y", key=f"{zone_name}_y", min_value=0.0, max_value=1.0, value=dy, step=0.01, format="%.4f")
-            h = st.number_input(f"{zone_name} H", key=f"{zone_name}_h", min_value=0.0, max_value=1.0, value=dh, step=0.01, format="%.4f")
+            y = st.number_input(f"{zone_name} Y", key=f"{zone_name}_y", min_value=0.0, max_value=1.0, value=dy,
+                                step=0.01, format="%.4f")
+            h = st.number_input(f"{zone_name} H", key=f"{zone_name}_h", min_value=0.0, max_value=1.0, value=dh,
+                                step=0.01, format="%.4f")
         zones[zone_name] = (x, y, w, h)
 
 with st.sidebar.expander("💾 Save / Load Presets", expanded=False):
@@ -119,7 +133,6 @@ with st.sidebar.expander("💾 Save / Load Presets", expanded=False):
 
 # --- Ignore Settings (text + zones combined) ---
 with st.sidebar.expander("🛑 Ignore Settings", expanded=False):
-
     # Load persistent ignore terms
     if "persistent_ignore_terms" not in st.session_state:
         st.session_state["persistent_ignore_terms"] = load_ignore_terms()
@@ -185,7 +198,6 @@ if uploaded_file:
             outline="green", width=3
         )
         draw.text((zx, max(0, zy - 15)), zone_name, fill="green")
-
 
     abs_ignore_zone = None
     if ignore_zone:
