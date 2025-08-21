@@ -185,11 +185,12 @@ with st.sidebar.expander("🛑 Ignore Settings", expanded=False):
         pil_bg = Image.open(uploaded_file).convert("RGB")
 
         st.subheader("➕ Draw Ignore Zones")
+
         canvas_result = st_canvas(
             fill_color="rgba(0, 0, 255, 0.3)",  # semi-transparent blue
             stroke_width=2,
             stroke_color="blue",
-            background_image=pil_bg,
+            background_image=np.array(pil_bg),  # ✅ Convert to NumPy
             update_streamlit=True,
             height=pil_bg.height,
             width=pil_bg.width,
