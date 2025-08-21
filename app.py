@@ -130,9 +130,11 @@ with st.sidebar.expander("🛑 Ignore Settings", expanded=False):
         st.session_state["persistent_ignore_terms"] = sorted(set(st.session_state["persistent_ignore_terms"]))
         save_ignore_terms(st.session_state["persistent_ignore_terms"])
         # safely clear input
-        st.session_state["ignore_input"] = ""
-        st.session_state["ignore_input_widget"] = ""
-        st.experimental_rerun()
+        st.session_state.update({
+            "ignore_input": "",
+            "ignore_input_widget": ""
+        })
+        st.rerun()
 
     if st.session_state["persistent_ignore_terms"]:
         st.markdown("**Ignored Texts (Persistent):**")
