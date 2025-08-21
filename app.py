@@ -136,10 +136,10 @@ with st.sidebar.expander("🛑 Ignore Settings", expanded=False):
 
     # --- Ignore Zone Definition ---
     st.markdown("### Define Ignore Zone")
-    iz_x = st.number_input("Ignore Zone X", min_value=0.0, max_value=1.0, value=0.0, step=0.01, format="%.4f")
-    iz_y = st.number_input("Ignore Zone Y", min_value=0.0, max_value=1.0, value=0.0, step=0.01, format="%.4f")
-    iz_w = st.number_input("Ignore Zone W", min_value=0.0, max_value=1.0, value=0.0, step=0.01, format="%.4f")
-    iz_h = st.number_input("Ignore Zone H", min_value=0.0, max_value=1.0, value=0.0, step=0.01, format="%.4f")
+    iz_x = st.number_input("Ignore Zone X", min_value=0.0, max_value=1.0, value=0.1216, step=0.01, format="%.4f")
+    iz_y = st.number_input("Ignore Zone Y", min_value=0.0, max_value=1.0, value=0.8958, step=0.01, format="%.4f")
+    iz_w = st.number_input("Ignore Zone W", min_value=0.0, max_value=1.0, value=0.8041, step=0.01, format="%.4f")
+    iz_h = st.number_input("Ignore Zone H", min_value=0.0, max_value=1.0, value=0.1959, step=0.01, format="%.4f")
     ignore_zone = (iz_x, iz_y, iz_w, iz_h) if iz_w > 0 and iz_h > 0 else None
 
 # --- Image Handling ---
@@ -199,7 +199,7 @@ if uploaded_file:
         # --- Check ignore zone ---
         if abs_ignore_zone:
             izx, izy, izw, izh = abs_ignore_zone
-            if (tx >= izx and ty >= izy and (tx + tw) <= (izx + izw) and (ty + th) <= (izy + izh)):
+            if tx >= izx and ty >= izy and (tx + tw) <= (izx + izw) and (ty + th) <= (izy + izh):
                 draw.rectangle([tx, ty, tx + tw, ty + th], outline="blue", width=3)
                 continue
 
