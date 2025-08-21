@@ -237,20 +237,21 @@ if uploaded_file:
         tx, ty, tw, th = min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys)
         ocr_box = (tx, ty, tw, th)
 
+        color = "red"  # default for OCR
+
         # --- Ignore by terms ---
         if any(term in detected_text for term in st.session_state["persistent_ignore_terms"]):
-            draw.rectangle([tx, ty, tx + tw, ty + th], outline="blue", width=3)
-            continue
+            color = "blue"
 
         # --- Ignore by zone ---
         if abs_ignore_zone:
             izx, izy, izw, izh = abs_ignore_zone
             if tx >= izx and ty >= izy and (tx + tw) <= (izx + izw) and (ty + th) <= (izy + izh):
-                draw.rectangle([tx, ty, tx + tw, ty + th], outline="blue", width=3)
-                continue
+                color = "blue"
 
-        # --- Draw all OCR detections first in red ---
-        draw.rectangle([tx, ty, tx + tw, ty + th], outline="red", width=2)
+        # --- Always draw OCR (red or blue), user zones are already green ---
+        draw.rectangle([tx, ty, tx + tw, ty + th], outline=color, width=2)
+        draw.text((tx, max(0, ty - 12)), text, fill=color)
 
         inside_any = False
         for zone_name, (zx, zy, zw, zh) in abs_zones.items():
