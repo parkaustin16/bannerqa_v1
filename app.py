@@ -115,10 +115,13 @@ with st.sidebar.expander("🛑 Ignore Settings", expanded=False):
     # Load persistent ignore terms
     if "persistent_ignore_terms" not in st.session_state:
         st.session_state["persistent_ignore_terms"] = load_ignore_terms()
+    if "ignore_input" not in st.session_state:
+        st.session_state["ignore_input"] = ""
 
     ignore_input = st.text_area(
         "Enter words/phrases to ignore (comma separated):",
-        key="ignore_input"
+        value=st.session_state["ignore_input"],
+        key="ignore_input_widget"
     )
 
     if st.button("Apply Ignore Terms"):
@@ -126,7 +129,9 @@ with st.sidebar.expander("🛑 Ignore Settings", expanded=False):
         st.session_state["persistent_ignore_terms"].extend(new_terms)
         st.session_state["persistent_ignore_terms"] = sorted(set(st.session_state["persistent_ignore_terms"]))
         save_ignore_terms(st.session_state["persistent_ignore_terms"])
-        st.session_state["ignore_input"] = ""  # clear
+        # safely clear input
+        st.session_state["ignore_input"] = ""
+        st.session_state["ignore_input_widget"] = ""
         st.experimental_rerun()
 
     if st.session_state["persistent_ignore_terms"]:
