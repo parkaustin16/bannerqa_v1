@@ -4,6 +4,7 @@ import easyocr
 import numpy as np
 import json
 import os
+from streamlit_drawable_canvas import st_canvas  # 👈 NEW
 
 st.set_page_config(page_title="Banner QA – Text Zone Validation", layout="wide")
 
@@ -18,6 +19,12 @@ def load_reader():
     return easyocr.Reader(["en"])
 
 reader = load_reader()
+
+# --- Cached OCR function ---
+@st.cache_data
+def run_ocr(img_bytes):
+    img = Image.open(img_bytes).convert("RGB")
+    return reader.readtext(np.array(img))
 
 # --- Overlap helper function ---
 def box_overlap(b1, b2, threshold=0.3):
@@ -177,7 +184,39 @@ with st.sidebar.expander("🛑 Ignore Settings", expanded=False):
         for term in st.session_state["persistent_ignore_terms"]:
             st.write(f"- {term}")
 
-    st.subheader("➕ Add Ignore Zone")
+    # 👇 New drawing canvas for ignore zones
+    if uploaded_file:
+        st.subheader("➕ Draw Ignore Zones")
+        img = Image.open(uploaded_file).convert("RGB")
+        canvas_result = st_canvas(
+            fill_color="rgba(0, 0, 255, 0.3)",  # semi-transparent blue
+            stroke_color="blue",
+            background_image=img,
+            update_streamlit=True,
+            height=img.height,
+            width=img.width,
+            drawing_mode="rect",
+            key="ignore_canvas",
+        )
+
+        if canvas_result.json_data is not None:
+            objects = canvas_result.json_data["objects"]
+            new_zones = []
+            for i, obj in enumerate(objects):
+                if obj["type"] == "rect":
+                    x = obj["left"] / img.width
+                    y = obj["top"] / img.height
+                    w = obj["width"] / img.width
+                    h = obj["height"] / img.height
+                    new_zones.append({"name": f"Drawn Zone {i+1}", "x": x, "y": y, "w": w, "h": h})
+            if st.button("💾 Save Drawn Zones"):
+                st.session_state["ignore_zones"].extend(new_zones)
+                save_ignore_zones(st.session_state["ignore_zones"])
+                st.success("✅ Drawn zones saved!")
+                st.rerun()
+
+    # Existing manual form (kept intact)
+    st.subheader("➕ Add Ignore Zone Manually")
     with st.form("add_ignore_zone_form", clear_on_submit=True):
         zone_name = st.text_input("Zone Name", "")
         x = st.number_input("X", min_value=0.0, max_value=1.0, value=0.1149, step=0.01, format="%.4f")
@@ -197,7 +236,7 @@ with st.sidebar.expander("🛑 Ignore Settings", expanded=False):
         for idx, z in enumerate(st.session_state["ignore_zones"]):
             col1, col2 = st.columns([4,1])
             with col1:
-                st.write(f"- {z['name']} ({z['x']}, {z['y']}, {z['w']} × {z['h']})")
+                st.write(f"- {z['name']} ({z['x']:.3f}, {z['y']:.3f}, {z['w']:.3f} × {z['h']:.3f})")
             with col2:
                 if st.button(f"🗑 Delete", key=f"del_ignore_{idx}"):
                     st.session_state["ignore_zones"].pop(idx)
@@ -234,8 +273,9 @@ if uploaded_file:
         draw.rectangle([izx, izy, izx + izw, izy + izh], outline="blue", width=3)
         draw.text((izx, max(0, izy - 15)), z["name"], fill="blue")
 
-    # OCR Detection
-    results = reader.readtext(np.array(img))
+    # --- Cached OCR call ---
+    results = run_ocr(uploaded_file)
+
     penalties = []
     score = 100
     used_zones = {z: False for z in abs_zones}
