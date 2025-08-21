@@ -137,6 +137,8 @@ with st.sidebar.expander("💾 Save / Load Presets", expanded=False):
         else:
             st.warning("⚠️ No preset found.")
 
+if "ignore_list" not in st.session_state:
+    st.session_state.ignore_list = []
 # --- Ignore Settings (text + zones combined) ---
 with st.sidebar.expander("🛑 Ignore Settings", expanded=False):
     # Load persistent ignore terms
@@ -164,12 +166,6 @@ with st.sidebar.expander("🛑 Ignore Settings", expanded=False):
             "ignore_input": "",
             "ignore_input_widget": ""
         })
-
-        # --- rerun fallback (supports old & new Streamlit) ---
-        if hasattr(st, "rerun"):
-            st.rerun()
-        else:
-            st.experimental_rerun()
 
     if st.session_state["persistent_ignore_terms"]:
         st.markdown("**Ignored Texts (Persistent):**")
