@@ -1,3 +1,4 @@
+streamlit-drawable-canvas
 streamlit>=1.25.0
 pillow
 numpy
